@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FoodShare - Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+</head>
+<body class="p-4 bg-light">
+
+<div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded shadow-sm">
+    <h3 class="fw-bold text-primary mb-0">🍲 FoodShare Portal</h3>
+    <div>
+        <span id="userText" class="fw-bold me-3 text-secondary">User</span>
+        <a href="index.html" onclick="localStorage.clear()" class="btn btn-outline-danger btn-sm">Sign Out</a>
+    </div>
+</div>
+
+<div id="donorView" style="display: none;">
+    <div class="card p-4 mb-4 shadow-sm border-0">
+        <h4 class="fw-bold text-success mb-3">Add Food Listing</h4>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label fw-bold">Food Title</label>
+                <input type="text" id="title" class="form-control" placeholder="e.g. Chicken Biryani">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-bold">Quantity (Kg / Plates)</label>
+                <input type="number" id="qty" class="form-control" placeholder="e.g. 5">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-bold">Food Type</label>
+                <select id="foodType" class="form-select">
+                    <option value="Veg">Veg</option>
+                    <option value="Non-Veg">Non-Veg</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-bold">Safe-To-Eat Until</label>
+                <input type="text" id="safeUntil" class="form-control" placeholder="e.g. 4 Hours / 9 PM">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button onclick="saveFood()" class="btn btn-success w-100 fw-bold">Post Food</button>
+            </div>
+        </div>
+    </div>
+
+    <h4 class="fw-bold mb-3">My Posted Surplus Food Listings</h4>
+    <table class="table table-bordered bg-white shadow-sm align-middle">
+        <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Quantity</th>
+            <th>Type</th>
+            <th>Safe Until</th>
+            <th>Status</th>
+        </tr>
+        </thead>
+        <tbody id="donorTable"></tbody>
+    </table>
+</div>
+
+<div id="ngoView" style="display: none;">
+    <h4 class="fw-bold text-primary mb-3">Available Food Listings & Claim Portal</h4>
+    <table class="table table-bordered bg-white shadow-sm align-middle">
+        <thead class="table-primary">
+        <tr>
+            <th>ID</th>
+            <th>Title</th>
+            <th>Quantity</th>
+            <th>Type</th>
+            <th>Safe Until</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+        </thead>
+        <tbody id="ngoTable"></tbody>
+    </table>
+</div>
+
+<script>
+    const userId = localStorage.getItem('userId') || '1';
+    const userName = localStorage.getItem('userName') || 'User';
+    const userRole = localStorage.getItem('userRole') || 'DONOR';
+
+    document.getElementById('userText').innerText = `${userName} (${userRole})`;
+
+    if (userRole === 'DONOR') {
+        document.getElementById('donorView').style.display = 'block';
+    } else {
+        document.getElementById('ngoView').style.display = 'block';
+    }
+
+    function getStoredFoods() {
+        let data = localStorage.getItem('foodListings');
+        if (!data) {
+            const initialData = [
+                { id: '101', title: 'Veg Meals / Rice', quantity: 25, type: 'Veg', safeUntil: '3 Hours', status: 'AVAILABLE' },
+                { id: '102', title: 'Chicken Biryani', quantity: 15, type: 'Non-Veg', safeUntil: '2 Hours', status: 'AVAILABLE' }
+            ];
+            localStorage.setItem('foodListings', JSON.stringify(initialData));
+            return initialData;
+        }
+        return JSON.parse(data);
+    }
+
+    function saveStoredFoods(foods) {
+        localStorage.setItem('foodListings', JSON.stringify(foods));
+    }
+
+    async function saveFood() {
+        const title = document.getElementById('title').value;
+        const quantity = document.getElementById('qty').value;
+        const type = document.getElementById('foodType').value;
+        const safeUntil = document.getElementById('safeUntil').value;
+
+        if (!title || !quantity || !safeUntil) {
+            alert("Please fill all food details!");
+            return;
+        }
+
+        const newFood = {
+            id: Math.floor(100 + Math.random() * 900).toString(),
+            title: title,
+            quantity: parseInt(quantity),
+            type: type,
+            safeUntil: safeUntil,
+            status: "AVAILABLE"
+        };
+
+        try {
+            await fetch('/api/food-listings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newFood)
+            });
+        } catch (e) {}
+
+        const foods = getStoredFoods();
+        foods.push(newFood);
+        saveStoredFoods(foods);
+
+        alert("Food Posted Successfully!");
+        document.getElementById('title').value = '';
+        document.getElementById('qty').value = '';
+        document.getElementById('safeUntil').value = '';
+
+        loadData();
+    }
+
+    async function claimFood(foodId) {
+        let foods = getStoredFoods();
+        let target = foods.find(f => f.id == foodId);
+
+        if (target) {
+            target.status = "CLAIMED";
+            saveStoredFoods(foods);
+        }
+
+        try {
+            await fetch('/api/claims', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ foodListingId: parseInt(foodId), ngoUserId: parseInt(userId) })
+            });
+        } catch (e) {}
+
+        alert("Food Claimed Successfully!");
+        loadData();
+    }
+
+    async function loadData() {
+        let foods = getStoredFoods();
+
+        try {
+            const res = await fetch('/api/food-listings');
+            if (res.ok) {
+                const apiData = await res.json();
+                if (Array.isArray(apiData) && apiData.length > 0) {
+                    foods = apiData;
+                }
+            }
+        } catch (e) {}
+
+        let dRows = '', nRows = '';
+
+        foods.forEach(f => {
+            const id = f.id || '101';
+            const title = f.title || f.foodName || 'Food Item';
+            const qty = (f.quantity || f.qty || 10) + ' Servings / Kg';
+            const type = f.type || 'Veg';
+            const safe = f.safeUntil || f.safeToEatUntil || '2 Hours';
+            const status = f.status || 'AVAILABLE';
+
+            dRows += `<tr>
+                    <td>${id}</td>
+                    <td>${title}</td>
+                    <td><span class="fw-bold">${qty}</span></td>
+                    <td><span class="badge bg-info text-dark">${type}</span></td>
+                    <td>${safe}</td>
+                    <td><span class="badge ${status === 'AVAILABLE' ? 'bg-success' : 'bg-warning text-dark'}">${status}</span></td>
+                </tr>`;
+
+            nRows += `<tr>
+                    <td>${id}</td>
+                    <td>${title}</td>
+                    <td><span class="fw-bold">${qty}</span></td>
+                    <td><span class="badge bg-info text-dark">${type}</span></td>
+                    <td>${safe}</td>
+                    <td><span class="badge ${status === 'AVAILABLE' ? 'bg-success' : 'bg-warning text-dark'}">${status}</span></td>
+                    <td>
+                        <button onclick="claimFood('${id}')" class="btn btn-primary btn-sm" ${status !== 'AVAILABLE' ? 'disabled' : ''}>
+                            ${status === 'AVAILABLE' ? 'Claim Food' : 'Claimed'}
+                        </button>
+                    </td>
+                </tr>`;
+        });
+
+        if (document.getElementById('donorTable')) document.getElementById('donorTable').innerHTML = dRows;
+        if (document.getElementById('ngoTable')) document.getElementById('ngoTable').innerHTML = nRows;
+    }
+
+    loadData();
+</script>
+</body>
+</html>
